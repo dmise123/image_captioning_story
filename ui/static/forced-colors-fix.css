@@ -1,0 +1,46 @@
+/* Fix for -ms-high-contrast deprecation warnings */
+@media (forced-colors: active) {
+  /* Add your high-contrast mode styles here */
+  .custom-image-preview {
+    border: 2px solid CanvasText;
+  }
+  
+  .caption-result {
+    border-left: 4px solid CanvasText;
+    background-color: Canvas;
+    color: CanvasText;
+  }
+  
+  .model-badge {
+    background-color: Canvas;
+    color: CanvasText;
+    border: 1px solid CanvasText;
+  }
+  
+  /* Ensure buttons have proper contrast */
+  button {
+    forced-color-adjust: none;
+    background-color: ButtonFace;
+    color: ButtonText;
+    border: 1px solid ButtonText;
+  }
+  
+  button:hover {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+  
+  button:disabled {
+    opacity: 0.5;
+    color: GrayText;
+  }
+}
+
+/* Additional styles for the FileUploader component */
+.bx--file-browse-btn {
+  max-width: 100%;
+}
+
+.bx--file__selected-file {
+  max-width: 100%;
+}

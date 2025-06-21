@@ -1,0 +1,60 @@
+/* Custom styles for the Image Captioning app */
+
+.logo {
+  max-height: 60px;
+  transition: transform 0.3s ease-in-out;
+}
+
+.logo:hover {
+  transform: scale(1.05);
+}
+
+.custom-image-preview {
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.custom-image-preview:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.caption-result {
+  background-color: #f4f4f4;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  font-weight: 500;
+  border-left: 4px solid #0f62fe;
+}
+
+.model-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background-color: #edf5ff;
+  color: #0043ce;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+}
+
+.app-title {
+  font-weight: 600;
+  color: #161616;
+  margin-bottom: 0.5rem;
+}
+
+.app-description {
+  color: #6f6f6f;
+  margin-bottom: 1.5rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .logo {
+    max-height: 50px;
+  }
+}

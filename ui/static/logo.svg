@@ -1,0 +1,32 @@
+<svg width="200" height="60" viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Camera body -->
+  <rect x="10" y="15" width="40" height="30" rx="5" fill="#0f62fe">
+    <animate attributeName="opacity" values="0.8;1;0.8" dur="3s" repeatCount="indefinite" />
+  </rect>
+  
+  <!-- Camera lens -->
+  <circle cx="30" cy="30" r="10" fill="#ffffff" />
+  <circle cx="30" cy="30" r="8" fill="#0f62fe" opacity="0.2" />
+  <circle cx="30" cy="30" r="6" fill="#ffffff" />
+  <circle cx="30" cy="30" r="4" fill="#0f62fe" />
+  
+  <!-- Camera flash -->
+  <rect x="40" y="10" width="10" height="5" rx="2" fill="#0f62fe" />
+  
+  <!-- Camera button -->
+  <circle cx="45" cy="25" r="3" fill="#ffffff" />
+  <circle cx="45" cy="25" r="2" fill="#e0e0e0" />
+  
+  <!-- Caption bubble -->
+  <path d="M52 22H70C72.2091 22 74 23.7909 74 26V34C74 36.2091 72.2091 38 70 38H66L62 42V38H52C49.7909 38 48 36.2091 48 34V26C48 23.7909 49.7909 22 52 22Z" fill="#0f62fe" opacity="0.8" />
+  <line x1="53" y1="27" x2="69" y2="27" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+  <line x1="53" y1="31" x2="64" y2="31" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+  
+  <!-- Text -->
+  <text x="80" y="35" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#161616">
+    ImageCaption
+  </text>
+  <text x="80" y="48" font-family="Arial, sans-serif" font-size="12" fill="#6f6f6f">
+    AI-powered image descriptions
+  </text>
+</svg>
