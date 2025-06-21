@@ -27,6 +27,7 @@
 	let caption = '';
 	let errorMessage = '';
 	let showResult = false;
+
 	
 	// Model selection
 	const models = ["RNN with Attention", "Vision Transformer"];
@@ -139,6 +140,7 @@
 					const data = await response.json();
 					caption = data.data.caption;
 					showResult = true;
+					loading = false; // Make sure to set loading to false
 				} catch (innerError) {
 					console.error('Error in reader.onload:', innerError);
 					errorMessage = `Error: ${innerError.message}`;
@@ -162,107 +164,150 @@
 	}
 </script>
 
-<Content>
-	<Grid>
-		<Row>			
-			<Column lg={8} md={6} sm={4} style="margin-bottom: 2rem;">				
-				<div style="margin-bottom: 1.5rem;">					<div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-						<img src="/favicon.svg" alt="ImageCaption Logo" class="logo" style="height: 3rem;" />
-						<h1 class="app-title">Image Captioning</h1>
+<div class="page-container">
+	<div class="content-wrapper">
+		<Content>
+			<Grid condensed fullWidth>
+				<Row style="justify-content: center; align-items: center; min-height: 100vh;">
+				<Column lg={8} md={6} sm={4} style="margin-bottom: 2rem;">
+					<div style="margin-bottom: 1.5rem;">					
+						<div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+							<img src="/favicon.svg" alt="ImageCaption Logo" class="logo" style="height: 3rem;" />
+							<h1 class="app-title">Image Captioning</h1>
+						</div>
+						<p class="app-description">Upload an image and get an AI-generated caption using state-of-the-art models</p>
 					</div>
-					<p class="app-description">Upload an image and get an AI-generated caption using state-of-the-art models</p>
-				</div>
 
-				<!-- Model Selection -->
-				<RadioButtonGroup
-					legendText="Select Model"
-					name="model-selection"
-					selected={selectedModel}
-					on:change={(e) => {
-						selectedModel = e.detail;
-						if (previewUrl) {
-							showResult = false;
-							caption = '';
-						}
-					}}
-				>
-					{#each models as model}
-						<RadioButton labelText={model} value={model} />
-					{/each}
-				</RadioButtonGroup>
-
-				<!-- File Upload Section -->					 <div style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
-					<FileUploader
-						labelTitle="Upload Image"
-						buttonLabel="Choose file"
-						labelDescription="Only PNG, JPG, JPEG, or GIF files. Max 5MB."
-						accept={['.jpg', '.jpeg', '.png', '.gif']}
-						multiple={false}
-						status={loading ? 'loading' : selectedFile ? 'complete' : 'edit'}
-						on:change={handleFileSelect}
-						on:add={handleFileSelect}
-					/>
-				</div>
-
-				<!-- Error Message -->
-				{#if errorMessage}
-					<InlineNotification
-						title="Error:"
-						subtitle={errorMessage}
-						kind="error"
-						hideCloseButton
-						style="margin-bottom: 1.5rem;"
-					/>
-				{/if}
-
-				<!-- Action Buttons -->
-				<div style="display: flex; gap: 1rem; margin-top: 1rem;">
-					<Button 
-						icon={CameraAction} 
-						on:click={processImage} 
-						disabled={!selectedFile || loading}
+					<!-- Model Selection -->
+					<RadioButtonGroup
+						legendText="Select Model"
+						name="model-selection"
+						selected={selectedModel}
+						on:change={(e) => {
+							selectedModel = e.detail;
+							if (previewUrl) {
+								showResult = false;
+								caption = '';
+							}
+						}}
 					>
-						Generate Caption
-					</Button>
-					<Button 
-						kind="tertiary" 
-						icon={Reset} 
-						on:click={resetForm} 
-						disabled={!selectedFile || loading}
-					>
-						Reset
-					</Button>
-				</div>
-			</Column>
+						{#each models as model}
+							<RadioButton labelText={model} value={model} />
+						{/each}
+					</RadioButtonGroup>
 
-			<Column lg={8} md={6} sm={4}>
-				<!-- Preview and Results Section -->
-				<Tile style="padding: 1.5rem; margin-bottom: 1.5rem;">
-					{#if loading}
-						<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px;">
-							<Loading style="margin-bottom: 1rem;" />
-							<p>Processing your image...</p>
-						</div>
-					{:else if previewUrl}						<h4 style="margin-bottom: 1rem;">Image Preview</h4>
-						<div class="custom-image-preview">
-							<img src={previewUrl} alt="Preview" style="width: 100%; height: auto; object-fit: contain; max-height: 400px;" />
-						</div>
-						
-						{#if showResult}
-							<h4 style="margin-bottom: 0.5rem;">Generated Caption</h4>
-							<div class="caption-result">
-								<p style="font-size: 1.1rem;">{caption}</p>
-							</div>
-							<p class="model-badge">Generated using {selectedModel}</p>
-						{/if}
-					{:else}
-						<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; text-align: center; color: #6f6f6f;">
-							<Upload size={48} style="margin-bottom: 1rem;" />
-							<p>Upload an image to see a preview and generate a caption</p>
-						</div>
+					<!-- File Upload Section -->					 
+					<div style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+						<FileUploader
+							labelTitle="Upload Image"
+							buttonLabel="Choose file"
+							labelDescription="Only PNG, JPG, JPEG, or GIF files. Max 5MB."
+							accept={['.jpg', '.jpeg', '.png', '.gif']}
+							multiple={false}
+							status={loading ? 'loading' : selectedFile ? 'complete' : 'edit'}
+							on:change={handleFileSelect}
+							on:add={handleFileSelect}
+						/>
+					</div>
+
+					<!-- Error Message -->
+					{#if errorMessage}
+						<InlineNotification
+							title="Error:"
+							subtitle={errorMessage}
+							kind="error"
+							hideCloseButton
+							style="margin-bottom: 1.5rem;"
+						/>
 					{/if}
-				</Tile>
-			</Column>
-		</Row>
-	</Grid>
-</Content>
+
+					<!-- Action Buttons -->
+					<div style="display: flex; gap: 1rem; margin-top: 1rem;">
+						<Button 
+							icon={CameraAction} 
+							on:click={processImage} 
+							disabled={!selectedFile || loading}
+						>
+							Generate Caption
+						</Button>
+						<Button 
+							kind="tertiary" 
+							icon={Reset} 
+							on:click={resetForm} 
+							disabled={!selectedFile || loading}
+						>
+							Reset
+						</Button>
+					</div>
+				</Column>				<Column lg={8} md={6} sm={4}>
+					<!-- Preview and Results Section -->
+					<Tile style="padding: 1.5rem; margin-bottom: 2rem; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 400px;">
+						{#if loading}
+							<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px;">
+								<Loading style="margin-bottom: 1rem;" />
+								<p>Processing your image...</p>
+							</div>
+						{:else if previewUrl}
+							<div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+								<h4 style="margin-bottom: 1rem;">Image Preview</h4>
+								<div class="custom-image-preview" style="margin-bottom: 1.5rem;">
+									<img src={previewUrl} alt="Preview" style="width: 100%; height: auto; object-fit: contain; max-height: 400px;" />
+								</div>
+								
+								{#if showResult}
+									<h4 style="margin-bottom: 0.5rem;">Generated Caption</h4>
+									<div class="caption-result" style="max-width: 100%;">
+										<p style="font-size: 1.1rem;">{caption}</p>
+									</div>
+									<p class="model-badge">Generated using {selectedModel}</p>
+								{/if}
+							</div>
+						{:else}
+							<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; text-align: center; color: #6f6f6f;">
+								<Upload size={32} style="margin-bottom: 1rem;" />
+								<p>Upload an image to see a preview and generate a caption</p>
+							</div>
+						{/if}
+					</Tile>				</Column>
+			</Row>
+		</Grid>
+	</Content>
+	</div>
+</div>
+
+<style>
+	:global(html, body) {
+		height: 100%;
+		margin: 0;
+		padding: 0;
+	}
+	
+	:global(body) {
+		display: flex;
+		flex-direction: column;
+	}
+	
+	:global(.bx--content) {
+		padding: 0 !important;
+		margin: 0 auto !important;
+		max-width: 1600px;
+		flex: 1;
+	}
+
+	:global(.bx--grid) {
+		padding: 0 1rem;
+		margin: 0;
+		width: 100%;
+		height: 100%;
+	}
+  
+	:global(.custom-image-preview) {
+		width: 100%;
+		max-width: 800px;
+	}
+
+	:global(.caption-result) {
+		width: 100%;
+		max-width: 800px;
+	}
+</style>
