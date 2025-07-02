@@ -1,48 +1,50 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import 'carbon-components-svelte/css/white.css';
+
+	// Carbon Icons
 	import Upload from "carbon-icons-svelte/lib/Upload.svelte";
 	import CameraAction from "carbon-icons-svelte/lib/CameraAction.svelte";
 	import Reset from "carbon-icons-svelte/lib/Reset.svelte";
 	import Send from "carbon-icons-svelte/lib/Send.svelte";
-    import TextMiningApplier from "carbon-icons-svelte/lib/TextMiningApplier.svelte"; // Untuk Generate Story
-    import { TextArea } from 'carbon-components-svelte'; // Untuk hasil story
+    import TextMiningApplier from "carbon-icons-svelte/lib/TextMiningApplier.svelte";
 
+	// Carbon Components
 	import {
 		Content, Grid, Row, Column, FileUploader, Button, Loading,
-		InlineNotification, Tile, TextInput
+		InlineNotification, Tile, TextInput, TextArea
 	} from 'carbon-components-svelte';
 
     // --- Type untuk data per gambar ---
     type ImageData = {
-        id: number; // Untuk key di #each
+        id: number;
         file: File;
         previewUrl: string;
         caption: string;
+        storySegment: string;
         isLoadingCaption: boolean;
         error: string | null;
     };
 
 	// --- State variables ---
-	let selectedFiles: ImageData[] = []; // Array untuk menyimpan data gambar
-    let nextImageId = 0; // Untuk ID unik
+	let selectedFiles: ImageData[] = [];
+    let nextImageId = 0;
 
-	let loadingAllCaptions = false; // Status loading untuk semua caption
+	let loadingAllCaptions = false;
 	let loadingPost = false;
     let loadingStory = false;
 
 	let errorMessage = '';
 	let successMessage = '';
-    let generatedStory = ''; // Untuk menyimpan hasil cerita dari LLM
+    let fullGeneratedStory = '';
 
-	// Variabel untuk Instagram
 	let igUsername = "";
 	let igPassword = "";
-	// captionForIg akan diambil dari generatedStory jika ada, atau caption gambar pertama
-    // atau biarkan pengguna mengeditnya.
 
 	const API_BASE_URL = 'http://localhost:8000';
+    const STORY_SEPARATOR_TOKEN = "[SEPARATOR]";
 
+    // --- Helper Functions ---
     function getFilesFromEvent(event: any): File[] {
         if (event.target && event.target.files && event.target.files.length > 0) return Array.from(event.target.files);
         if (event.detail && Array.isArray(event.detail) && event.detail.length > 0 && event.detail[0] instanceof File) return event.detail;
@@ -52,12 +54,24 @@
         return [];
     }
 
+    function clearMessages(clearStory = false) {
+        errorMessage = '';
+        successMessage = '';
+        if (clearStory) {
+            fullGeneratedStory = '';
+            selectedFiles.forEach(slot => slot.storySegment = '');
+            selectedFiles = [...selectedFiles];
+        }
+    }
+
+    function revokePreviewUrl(url: string | null) {
+        if (url) URL.revokeObjectURL(url);
+    }
+
 	function handleFileSelect(event: any) {
-		clearMessages();
-        // Hapus URL preview lama untuk mencegah memory leak
-        selectedFiles.forEach(imgData => URL.revokeObjectURL(imgData.previewUrl));
-		selectedFiles = []; // Reset array saat file baru dipilih
-        generatedStory = ''; // Reset story
+		clearMessages(true); // Clear story juga karena gambar berubah
+        selectedFiles.forEach(imgData => revokePreviewUrl(imgData.previewUrl));
+		selectedFiles = [];
 
 		try {
 			const files = getFilesFromEvent(event);
@@ -68,194 +82,195 @@
                         file: file,
                         previewUrl: URL.createObjectURL(file),
                         caption: '',
+                        storySegment: '',
                         isLoadingCaption: false,
                         error: null
                     });
                 });
-                selectedFiles = [...selectedFiles]; // Trigger reactivity
-                console.log(`${selectedFiles.length} file(s) selected.`);
-			} else {
-                console.log('No files selected or selection cancelled.');
-            }
+                selectedFiles = [...selectedFiles];
+			}
 		} catch (error: any) {
 			errorMessage = `Error processing files: ${error.message}.`;
             selectedFiles = [];
 		}
 	}
 
-    function clearMessages() {
-        errorMessage = '';
-        successMessage = '';
-        generatedStory = ''; // Juga clear story
-    }
-
 	function resetForm() {
-        clearMessages();
-        selectedFiles.forEach(imgData => URL.revokeObjectURL(imgData.previewUrl));
+        clearMessages(true);
+        selectedFiles.forEach(imgData => { revokePreviewUrl(imgData.previewUrl); });
 		selectedFiles = [];
-		loadingAllCaptions = false;
-		loadingPost = false;
-        loadingStory = false;
-		igUsername = "";
-		igPassword = "";
+		loadingAllCaptions = false; loadingPost = false; loadingStory = false;
+		igUsername = ""; igPassword = "";
 	}
 
 	async function generateAllCaptions() {
-		if (selectedFiles.length === 0) {
-			errorMessage = 'Please select image(s) first.';
-			return;
-		}
-
-		loadingAllCaptions = true;
-		clearMessages();
-        // Reset caption dan error sebelumnya di setiap slot
+		if (selectedFiles.length === 0) { errorMessage = 'Please select image(s) first.'; return; }
+		loadingAllCaptions = true; clearMessages(true); // Clear story jika caption di-generate ulang
         selectedFiles.forEach(imgData => {
-            imgData.caption = '';
-            imgData.error = null;
-            imgData.isLoadingCaption = true;
+            imgData.caption = ''; imgData.storySegment = ''; imgData.error = null; imgData.isLoadingCaption = true;
         });
         selectedFiles = [...selectedFiles];
 
-
+        let anyErrorInCaptions = false;
         const captionPromises = selectedFiles.map(async (imgData) => {
-            const formData = new FormData();
-            formData.append('image', imgData.file);
+            const formData = new FormData(); formData.append('image', imgData.file);
             try {
-                const response = await fetch(`${API_BASE_URL}/generate-caption/`, {
-                    method: 'POST',
-                    body: formData,
-                });
+                const response = await fetch(`${API_BASE_URL}/generate-caption/`, { method: 'POST', body: formData });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.detail || `Server error for ${imgData.file.name}`);
                 imgData.caption = data.caption;
             } catch (error: any) {
-                imgData.caption = ''; // Atau pesan error spesifik
-                imgData.error = error.message || 'Failed to generate caption';
-                errorMessage = `Error generating caption for ${imgData.file.name}. `; // Tambahkan ke pesan global
-            } finally {
-                imgData.isLoadingCaption = false;
-            }
+                imgData.caption = ''; imgData.error = error.message || 'Failed to generate caption'; anyErrorInCaptions = true;
+            } finally { imgData.isLoadingCaption = false; }
         });
-
         await Promise.all(captionPromises);
-        selectedFiles = [...selectedFiles]; // Update UI setelah semua selesai
-		loadingAllCaptions = false;
-        if (!errorMessage) { // Hanya tampilkan success jika tidak ada error sama sekali
-             successMessage = 'Captions generated for all selected images.';
-        }
+        selectedFiles = [...selectedFiles]; loadingAllCaptions = false;
+        if (anyErrorInCaptions) { errorMessage = 'Some captions could not be generated. Please check individual images.'; }
+        else if (selectedFiles.length > 0) { successMessage = 'Captions generated for all selected images.'; }
 	}
+
+    const STORY_SEPARATOR_TOKEN_IN_STORY_CHECK = (storyText: string) => storyText.includes(STORY_SEPARATOR_TOKEN);
 
     async function generateStory() {
         const validCaptions = selectedFiles.filter(img => img.caption && !img.error).map(img => img.caption);
-        if (validCaptions.length < 1) { // Ubah minimal menjadi 1 jika cerita bisa dari 1 caption
-            errorMessage = "At least one valid caption is needed to generate a story.";
-            return;
-        }
-
-        loadingStory = true;
-        clearMessages();
-        generatedStory = '';
-
+        if (validCaptions.length === 0) { errorMessage = "No valid captions available. Please generate captions first."; return; }
+        loadingStory = true; clearMessages(false); // Jangan clear story yang mungkin sudah ada jika hanya pesan
+        fullGeneratedStory = '';
+        selectedFiles.forEach(slot => slot.storySegment = ''); selectedFiles = [...selectedFiles];
         try {
             const response = await fetch(`${API_BASE_URL}/generate-story-from-captions/`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ captions: validCaptions })
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || `Story API error: ${response.status}`);
-            generatedStory = data.story;
-            successMessage = "Story generated successfully!";
-        } catch (error: any) {
-            errorMessage = `Error generating story: ${error.message}`;
-        } finally {
-            loadingStory = false;
-        }
+            fullGeneratedStory = data.story;
+            const isSegmentedByApiLogic = data.is_segmented;
+            const imagesWithValidCaptions = selectedFiles.filter(img => img.caption && !img.error);
+
+            if (imagesWithValidCaptions.length > 1 && isSegmentedByApiLogic) {
+                const storyParts = fullGeneratedStory.split(STORY_SEPARATOR_TOKEN);
+                if (storyParts.length >= imagesWithValidCaptions.length) {
+                    imagesWithValidCaptions.forEach((imgData, index) => {
+                        if (storyParts[index]) imgData.storySegment = storyParts[index].trim();
+                        else imgData.storySegment = "(Segment missing)";
+                    });
+                } else {
+                    if (imagesWithValidCaptions.length > 0) imagesWithValidCaptions[0].storySegment = fullGeneratedStory;
+                    errorMessage = "Story generated, but segmentation per image might be incomplete. Full story shown under first image.";
+                }
+            } else if (imagesWithValidCaptions.length === 1) {
+                imagesWithValidCaptions[0].storySegment = fullGeneratedStory;
+            } else {
+                 if (imagesWithValidCaptions.length > 0) imagesWithValidCaptions[0].storySegment = fullGeneratedStory;
+                 if (imagesWithValidCaptions.length > 1) errorMessage = "Story generated, but couldn't be segmented. Displaying full story under first image.";
+            }
+            selectedFiles = [...selectedFiles]; successMessage = "Story generated successfully!";
+        } catch (error: any) { errorMessage = `Error generating story: ${error.message}`;
+        } finally { loadingStory = false; }
     }
 
-
 	async function postToInstagramHandler() {
-        if (selectedFiles.length === 0) {
-            errorMessage = "Please select image(s) first.";
-            return;
-        }
-        if (!igUsername || !igPassword) {
-            errorMessage = "Instagram username and password are required.";
-            return;
-        }
+        if (selectedFiles.length === 0) { errorMessage = "Please select image(s) first."; return; }
+        if (!igUsername || !igPassword) { errorMessage = "Instagram username and password are required."; return; }
 
-        loadingPost = true;
-        clearMessages();
+        loadingPost = true; clearMessages(false);
+        let totalPostsMade = 0;
+        let anyPostErrors = false;
+        let aggregatedSuccessMessage = "";
+        let aggregatedErrorMessage = "";
 
         try {
-            if (generatedStory && selectedFiles.length > 0) {
-                // Jika ada story, post story dengan gambar pertama
-                const firstImage = selectedFiles[0];
+            // Iterasi semua gambar yang dipilih
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const imgData = selectedFiles[i];
+                let captionForThisPost = "";
+
+                if (fullGeneratedStory) {
+                    // KASUS: Ada Story yang dihasilkan
+                    if (imgData.storySegment) { // Utamakan segmen cerita jika ada
+                        captionForThisPost = imgData.storySegment;
+                        console.log(`Using story segment for image ${imgData.file.name}: "${captionForThisPost.substring(0,50)}..."`);
+                    } else if (i === 0) { // Jika ini gambar pertama & tidak ada segmen (misal story 1 gambar)
+                        captionForThisPost = fullGeneratedStory;
+                        console.log(`Using full story for first image ${imgData.file.name}: "${captionForThisPost.substring(0,50)}..."`);
+                    } else if (imgData.caption && !imgData.error) { // Fallback ke caption individual untuk gambar berikutnya jika tidak ada segmen
+                        captionForThisPost = imgData.caption;
+                        console.log(`Using individual caption as fallback for image ${imgData.file.name}: "${captionForThisPost.substring(0,50)}..."`);
+                    } else {
+                        aggregatedErrorMessage += `Skipping ${imgData.file.name} (no story segment or valid caption). `;
+                        anyPostErrors = true;
+                        continue; // Lanjut ke gambar berikutnya
+                    }
+                } else {
+                    // KASUS: Tidak ada Story (hanya generate caption individual)
+                    if (imgData.caption && !imgData.error) {
+                        captionForThisPost = imgData.caption;
+                        console.log(`Using individual caption for image ${imgData.file.name}: "${captionForThisPost.substring(0,50)}..."`);
+                    } else {
+                        aggregatedErrorMessage += `Skipping ${imgData.file.name} (no valid caption). `;
+                        anyPostErrors = true;
+                        continue; // Lanjut ke gambar berikutnya
+                    }
+                }
+
                 const formData = new FormData();
-                formData.append('image', firstImage.file);
+                formData.append('image', imgData.file);
                 formData.append('username', igUsername);
                 formData.append('password', igPassword);
-                formData.append('caption', generatedStory); // Post story sebagai caption
+                formData.append('caption', captionForThisPost);
 
+                if (totalPostsMade > 0) await new Promise(resolve => setTimeout(resolve, 2500));
+
+                console.log(`Attempting to post ${imgData.file.name}...`);
                 const response = await fetch(`${API_BASE_URL}/post-to-instagram/`, { method: 'POST', body: formData });
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || `IG Post Error: ${response.status}`);
-                successMessage = `Story with first image posted: ${data.message || 'Success!'}`;
 
-            } else if (selectedFiles.length > 0) {
-                // Jika tidak ada story, post gambar satu per satu (atau hanya yang pertama untuk kesederhanaan awal)
-                // Untuk contoh ini, kita post semua gambar satu per satu dengan caption masing-masing
-                let postCount = 0;
-                for (const imgData of selectedFiles) {
-                    if (!imgData.caption || imgData.error) {
-                        errorMessage += `Skipping ${imgData.file.name} due to missing/error caption. `;
-                        continue;
-                    }
-                    const formData = new FormData();
-                    formData.append('image', imgData.file);
-                    formData.append('username', igUsername);
-                    formData.append('password', igPassword);
-                    formData.append('caption', imgData.caption); // Caption individual
+                if (!response.ok) {
+                    aggregatedErrorMessage += `Failed to post ${imgData.file.name}: ${data.detail || response.status}. `;
+                    anyPostErrors = true;
+                } else {
+                    totalPostsMade++;
+                    aggregatedSuccessMessage += `Posted ${imgData.file.name}. `;
+                }
+            } // Akhir loop for
 
-                    const response = await fetch(`${API_BASE_URL}/post-to-instagram/`, { method: 'POST', body: formData });
-                    const data = await response.json();
-                    if (!response.ok) {
-                        errorMessage += `Failed to post ${imgData.file.name}: ${data.detail || response.status}. `;
-                    } else {
-                        postCount++;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Jeda antar post
-                }
-                if (postCount > 0) {
-                    successMessage = `${postCount} image(s) posted successfully to Instagram.`;
-                }
-                if (errorMessage) { // Jika ada error parsial
-                    // successMessage mungkin sudah ada, jadi kita tidak menimpanya
-                }
-
-            } else {
-                errorMessage = "No images or story to post.";
+            // Set final messages
+            if (totalPostsMade > 0) {
+                successMessage = aggregatedSuccessMessage + `Total ${totalPostsMade} image(s) posted.`;
             }
+            if (anyPostErrors) {
+                errorMessage = aggregatedErrorMessage;
+                 if (totalPostsMade > 0) {
+                    successMessage = (successMessage ? successMessage + " " : "") + "However, some posts may have encountered errors or were skipped.";
+                }
+            }
+            if (totalPostsMade === 0 && !anyPostErrors && selectedFiles.length > 0 && !successMessage) {
+                errorMessage = (errorMessage ? errorMessage + " " : "") + "No images were eligible for posting.";
+            }
+
+
         } catch (error: any) {
-            errorMessage = `Error during Instagram post: ${error.message}`;
+            errorMessage = (errorMessage ? errorMessage + " " : "") + `General Instagram post error: ${error.message}`;
         } finally {
             loadingPost = false;
         }
     }
 
     // Computed properties
-    $: hasValidCaptions = selectedFiles.some(img => img.caption && !img.error);
-    $: canGenerateStory = selectedFiles.filter(img => img.caption && !img.error).length >= 1; // Minimal 1 caption untuk story
-    $: canPostToIg = selectedFiles.length > 0 && (generatedStory || hasValidCaptions);
-
+    $: hasAnyFile = selectedFiles.length > 0;
+    $: hasAnyValidCaption = selectedFiles.some(img => img.caption && !img.error);
+    $: canGenerateStory = hasAnyValidCaption;
+    $: canPostToIg = selectedFiles.length > 0 && (fullGeneratedStory || hasAnyValidCaption);
 </script>
 
+<!-- HTML Markup -->
 <div class="page-container">
 	<div class="content-wrapper">
 		<Content>
 			<Grid condensed fullWidth>
-				<Row style="justify-content: center; align-items: flex-start; min-height: 100vh; gap: 2rem;">
-					<Column lg={7} md={6} sm={4} style="margin-bottom: 2rem;">
+				<Row style="justify-content: center; align-items: flex-start; gap: 2rem;">
+					<Column lg={7} md={7} sm={4} style="margin-bottom: 2rem;">
 						<Tile style="padding:1.5rem">
                             <div style="margin-bottom: 1.5rem;">
                                 <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
@@ -270,10 +285,10 @@
                                 buttonLabel="Choose Files"
                                 labelDescription="Select one or more PNG, JPG, JPEG files."
                                 accept={['.jpg', '.jpeg', '.png']}
-                                multiple={true} 
+                                multiple={true}
                                 status={loadingAllCaptions || loadingStory ? 'uploading' : selectedFiles.length > 0 ? 'complete' : 'edit'}
                                 on:change={handleFileSelect}
-                                files={selectedFiles.map(sf => sf.file)} 
+                                files={selectedFiles.map(sf => sf.file)}
                                 on:clear={resetForm}
                                 disabled={loadingAllCaptions || loadingPost || loadingStory}
                             />
@@ -286,70 +301,70 @@
                             {/if}
 
                             <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1.5rem;">
-                                <Button icon={CameraAction} on:click={generateAllCaptions} disabled={selectedFiles.length === 0 || loadingAllCaptions || loadingPost || loadingStory}>
+                                <Button icon={CameraAction} on:click={generateAllCaptions} disabled={!hasAnyFile || loadingAllCaptions || loadingPost || loadingStory}>
                                     {loadingAllCaptions ? 'Generating Captions...' : 'Generate All Captions'}
                                 </Button>
                                 {#if canGenerateStory}
-                                <Button kind="secondary" icon={TextMiningApplier} on:click={generateStory} disabled={loadingStory || loadingAllCaptions || loadingPost}>
+                                <Button kind="secondary" icon={TextMiningApplier} on:click={generateStory} disabled={loadingStory || loadingAllCaptions || loadingPost || !hasAnyValidCaption}>
                                     {loadingStory ? 'Generating Story...' : 'Generate Story'}
                                 </Button>
                                 {/if}
                                 <Button kind="tertiary" icon={Reset} on:click={resetForm} disabled={loadingAllCaptions || loadingPost || loadingStory}> Reset </Button>
                             </div>
 
-                            {#if generatedStory}
-                                <div style="margin-top: 2rem; border-top: 1px solid #e0e0e0; padding-top: 1.5rem;">
-                                    <h3 style="margin-bottom: 0.75rem;">Generated Story:</h3>
-                                    <TextArea labelText="" value={generatedStory} readOnly rows={8} class="story-textarea"/>
+                            {#if fullGeneratedStory && selectedFiles.length > 1}
+                                <div class="story-preview-box">
+                                    <h3 class="subsection-title">Full Generated Story (with separators if multi-image)</h3>
+                                    <TextArea labelText="" value={fullGeneratedStory} readOnly rows={6} class="story-textarea-readonly"/>
                                 </div>
                             {/if}
 
                             {#if canPostToIg}
-                                <div style="margin-top: 2rem; border-top: 1px solid #e0e0e0; padding-top: 1.5rem;">
-                                    <h3 style="margin-bottom: 1rem;">Post to Instagram</h3>
-                                    <p style="font-size: 0.9em; color: #525252; margin-bottom:1rem;">
-                                        {#if generatedStory}
-                                            The generated story and the first uploaded image will be posted.
+                                <div class="ig-post-section">
+                                    <h3 class="subsection-title">Post to Instagram</h3>
+                                    <p class="ig-post-description">
+                                        {#if fullGeneratedStory}
+                                            Each uploaded image will be posted. Story segments (or the full story for a single source image) will be used as captions. Fallback to individual captions if needed.
                                         {:else if selectedFiles.length > 0}
                                             Each image with its caption will be posted individually.
                                         {/if}
                                     </p>
                                     <TextInput labelText="Instagram Username" bind:value={igUsername} disabled={loadingPost || loadingAllCaptions || loadingStory}/>
                                     <TextInput labelText="Instagram Password" type="password" bind:value={igPassword} disabled={loadingPost || loadingAllCaptions || loadingStory}/>
-                                    <Button icon={Send} on:click={postToInstagramHandler} disabled={loadingPost || loadingAllCaptions || loadingStory || !igUsername || !igPassword}>
+                                    <Button icon={Send} on:click={postToInstagramHandler} disabled={loadingPost || loadingAllCaptions || loadingStory || !igUsername || !igPassword || !hasAnyFile}>
                                         {loadingPost ? 'Posting...' : 'Post to IG'}
                                     </Button>
                                 </div>
                             {/if}
                         </Tile>
 					</Column>
-                    <Column lg={9} md={6} sm={4}>
+                    <Column lg={5} md={5} sm={4}>
                         <Tile style="padding: 1.5rem; height: 100%; min-height: 400px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
                             {#if selectedFiles.length === 0 && !loadingAllCaptions && !loadingStory}
-                                <div class="placeholder-preview">
-                                    <Upload size={48} />
-                                    <p>Upload image(s) to see previews and generate content.</p>
-                                </div>
+                                <div class="placeholder-preview"> <Upload size={48} /> <p>Upload image(s) to see previews and generate content.</p> </div>
                             {:else if selectedFiles.length > 0}
-                                <h4 style="margin-bottom: 1rem;">Image Previews & Captions</h4>
+                                <h4 style="margin-bottom: 1rem;">Image Previews, Captions & Story Segments</h4>
                                 <div class="previews-grid">
                                     {#each selectedFiles as imgData (imgData.id)}
                                         <div class="preview-item">
                                             <img src={imgData.previewUrl} alt="Preview {imgData.file.name}" class="preview-image-multi" />
                                             {#if imgData.isLoadingCaption}
                                                 <Loading small withOverlay={false} description="Captioning..." style="margin-top:0.5rem"/>
-                                            {:else if imgData.caption}
+                                            {/if}
+                                            {#if imgData.caption && !imgData.isLoadingCaption}
                                                 <p class="caption-multi"><strong>Caption:</strong> {imgData.caption}</p>
-                                            {:else if imgData.error}
+                                            {/if}
+                                            {#if imgData.storySegment && !imgData.isLoadingCaption && !loadingStory}
+                                                <p class="story-segment"><strong>Story Part:</strong> {imgData.storySegment}</p>
+                                            {/if}
+                                            {#if imgData.error && !imgData.isLoadingCaption}
                                                 <p class="caption-multi-error">Error: {imgData.error}</p>
                                             {/if}
                                         </div>
                                     {/each}
                                 </div>
                             {:else if loadingAllCaptions || loadingStory}
-                                <div class="placeholder-preview">
-                                    <Loading description="Processing..." withOverlay={false} />
-                                </div>
+                                <div class="placeholder-preview"> <Loading description="Processing..." withOverlay={false} /> </div>
                             {/if}
                         </Tile>
 					</Column>
@@ -363,42 +378,26 @@
 	:global(html, body) { height: 100%; margin: 0; padding: 0; background-color: #f4f4f4; font-family: 'IBM Plex Sans', sans-serif; }
 	:global(body) { display: flex; flex-direction: column; }
 	:global(.bx--content) { padding: 1.5rem !important; margin: 0 auto !important; max-width: 1600px; flex: 1; }
-	:global(.bx--grid) { padding: 0; margin: 0; width: 100%; height: 100%; }
-    :global(.bx--file-browse-btn), :global(.bx--file__selected-file) { font-size: 0.875rem !important;} /* Kecilkan font fileuploader */
-
+	:global(.bx--grid) { padding: 0; margin: 0; width: 100%; }
+    :global(.bx--file-browse-btn), :global(.bx--file__selected-file) { font-size: 0.875rem !important;}
 
     .page-container { display: flex; flex-direction: column; min-height: 100vh; }
-    .content-wrapper { flex: 1; display: flex; /* align-items: center; */ /* Hapus agar konten bisa scroll */ justify-content: center; }
+    .content-wrapper { flex: 1; display: flex; justify-content: center; }
 	.app-title { font-size: 2rem; font-weight: 600; color: #161616; }
 	.app-description { font-size: 1rem; color: #525252; margin-bottom: 1.5rem; }
+    .subsection-title { font-size: 1.25rem; margin-bottom: 0.75rem; color: #161616; font-weight: 500;}
+    .ig-post-description { font-size: 0.9em; color: #525252; margin-bottom:1rem; }
 
     .placeholder-preview { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #6f6f6f; height: 100%; }
     .placeholder-preview p { margin-top: 1rem; }
 
-    .previews-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); /* Kolom lebih kecil untuk banyak gambar */
-        gap: 1rem;
-        max-height: 70vh; /* Batasi tinggi dan buat scrollable jika banyak gambar */
-        overflow-y: auto;
-        padding: 0.5rem;
-        border: 1px solid #e0e0e0;
-        border-radius: 4px;
-    }
-    .preview-item {
-        border: 1px solid #f0f0f0;
-        padding: 0.75rem;
-        border-radius: 4px;
-        background-color: #fff;
-    }
-    .preview-image-multi {
-        width: 100%;
-        height: 150px; /* Tinggi preview konsisten */
-        object-fit: cover;
-        margin-bottom: 0.5rem;
-        border-radius: 3px;
-    }
-    .caption-multi { font-size: 0.8rem; background-color: #f4f7fb; padding: 0.5rem; border-radius: 3px; margin-top: 0.5rem; word-break: break-word;}
+    .previews-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; max-height: calc(100vh - 250px); overflow-y: auto; padding: 0.5rem; border: 1px solid #e0e0e0; border-radius: 4px; background-color: #f9f9f9; }
+    .preview-item { border: 1px solid #e8e8e8; padding: 0.75rem; border-radius: 4px; background-color: #fff; display: flex; flex-direction: column; }
+    .preview-image-multi { width: 100%; height: 160px; object-fit: cover; margin-bottom: 0.5rem; border-radius: 3px; }
+    .caption-multi { font-size: 0.8rem; background-color: #e8f5e9; padding: 0.5rem; border-radius: 3px; margin-top: 0.5rem; word-break: break-word; flex-grow: 1; border: 1px solid #d4e8d5;}
+    .story-segment { font-size: 0.8rem; background-color: #e0f2f7; padding: 0.5rem; border-radius: 3px; margin-top: 0.5rem; word-break: break-word; flex-grow: 1; border: 1px solid #c9e2e8;}
     .caption-multi-error { font-size: 0.8rem; background-color: #fff1f1; color: #da1e28; padding: 0.5rem; border-radius: 3px; margin-top: 0.5rem; }
-    .story-textarea :global(textarea) { background-color: #f4f7fb !important; font-size: 0.95rem; line-height: 1.5; }
+    .story-preview-box { margin-top: 1.5rem; padding: 1rem; background-color: #f9f9f9; border-radius: 4px; border: 1px solid #e0e0e0;}
+    .story-textarea-readonly :global(textarea) { background-color: #e8e8e8 !important; font-style: italic; }
+    .ig-post-section { margin-top: 2rem; border-top: 1px solid #e0e0e0; padding-top: 1.5rem; }
 </style>

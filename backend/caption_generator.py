@@ -7,44 +7,31 @@ import pickle
 import os
 import argparse
 
-# --- Definisi Model (HARUS SAMA PERSIS dengan di notebook training) ---
 
 
 class BahdanauAttention(tf.keras.Model):
     def __init__(self, units):
         super(BahdanauAttention, self).__init__()
-        self.units = units  # Simpan units untuk referensi jika perlu
+        self.units = units  
         self.W1 = tf.keras.layers.Dense(units)
         self.W2 = tf.keras.layers.Dense(units)
         self.V = tf.keras.layers.Dense(1)
 
     def call(self, features, hidden):
-        # features shape: (batch_size, num_attention_features, cnn_embedding_dim) -> e.g., (1, 64, 256)
-        # hidden shape SEHARUSNYA: (batch_size, self.units) -> e.g., (1, 512)
-
-        # WORKAROUND: Periksa dan perbaiki bentuk 'hidden' jika ia adalah rank-1 tensor
+        
         if tf.rank(hidden) == 1:
-            # Dapatkan batch_size dari tensor 'features'
+       
             current_batch_size = tf.shape(features)[0]
-            # tf.print("Warning: Reshaping hidden in BahdanauAttention from rank 1. Original shape:", tf.shape(hidden),
-            #          "Target batch_size:", current_batch_size, "Target units:", self.units)
-            # Bentuk ulang 'hidden' menjadi (current_batch_size, self.units)
             hidden = tf.reshape(hidden, [current_batch_size, self.units])
-            # Anda mungkin ingin memastikan bentuknya setelah reshape jika perlu debug lebih lanjut
-            # hidden = tf.ensure_shape(hidden, [None, self.units])
-
-        # hidden_with_time_axis shape == (batch_size, 1, self.units)
         hidden_with_time_axis = tf.expand_dims(hidden, 1)
 
-        # self.W1(features) hasilnya (batch_size, num_attention_features, self.units)
-        # self.W2(hidden_with_time_axis) hasilnya (batch_size, 1, self.units)
-        # Penjumlahan menggunakan broadcasting: (batch_size, num_attention_features, self.units)
+ 
         score = tf.nn.tanh(self.W1(features) + self.W2(hidden_with_time_axis))
 
-        # attention_weights shape == (batch_size, num_attention_features, 1)
+      
         attention_weights = tf.nn.softmax(self.V(score), axis=1)
 
-        # context_vector shape after sum == (batch_size, self.units)
+    
         context_vector = attention_weights * features
         context_vector = tf.reduce_sum(context_vector, axis=1)
 
@@ -56,7 +43,7 @@ class CNN_Encoder(tf.keras.Model):
         super(CNN_Encoder, self).__init__()
         self.fc = tf.keras.layers.Dense(embedding_dim)
 
-    def call(self, x, training=False):  # Tambahkan parameter training jika ada di definisi asli
+    def call(self, x, training=False):  
         x = self.fc(x)
         x = tf.nn.relu(x)
         return x
@@ -75,11 +62,11 @@ class RNN_Decoder(tf.keras.Model):
         self.fc2 = tf.keras.layers.Dense(vocab_size)
         self.attention = BahdanauAttention(self.units)
 
-    def call(self, x, features, hidden, training=False):  # Tambahkan parameter training
+    def call(self, x, features, hidden, training=False):  
         context_vector, attention_weights = self.attention(features, hidden)
         x = self.embedding(x)
         x = tf.concat([tf.expand_dims(context_vector, 1), x], axis=-1)
-        # Pastikan training=training diteruskan
+
         output, state = self.gru(x, training=training)
         x = self.fc1(output)
         x = tf.reshape(x, (-1, x.shape[2]))
@@ -88,7 +75,7 @@ class RNN_Decoder(tf.keras.Model):
 
     def reset_state(self, batch_size):
         return tf.zeros((batch_size, self.units))
-# --- Akhir Definisi Model ---
+
 
 
 def load_image_preprocess(image_path):
@@ -110,12 +97,10 @@ def generate_caption(image_path, inception_model, cnn_encoder, rnn_decoder, toke
     hidden = rnn_decoder.reset_state(batch_size=1)
 
     temp_input = tf.expand_dims(load_image_preprocess(
-        image_path)[0], 0)  # (1, 299, 299, 3)
-    img_tensor_val = inception_model(temp_input)  # (1, 8, 8, 2048)
+        image_path)[0], 0)  
+    img_tensor_val = inception_model(temp_input) 
     img_tensor_val = tf.reshape(
-        img_tensor_val, (img_tensor_val.shape[0], -1, img_tensor_val.shape[3]))  # (1, 64, 2048)
-
-    # (1, 64, embedding_dim)
+        img_tensor_val, (img_tensor_val.shape[0], -1, img_tensor_val.shape[3])) 
     features = cnn_encoder(img_tensor_val, training=False)
 
     dec_input = tf.expand_dims([tokenizer.word_index['<start>']], 0)
@@ -128,7 +113,7 @@ def generate_caption(image_path, inception_model, cnn_encoder, rnn_decoder, toke
         predicted_id = tf.argmax(predictions[0]).numpy()
 
         word = tokenizer.index_word.get(
-            predicted_id, "<unk>")  # Handle unknown words
+            predicted_id, "<unk>")  
         result_caption.append(word)
 
         if word == '<end>':
@@ -153,10 +138,7 @@ def plot_attention(image_path, result_caption, attention_plot):
     fig = plt.figure(figsize=(10, 10))
     len_result = len(result_caption.split())
 
-    # Perbaikan: pastikan subplot grid cukup besar
-    # Misalnya, jika len_result adalah 5, kita butuh grid 3x2 atau 2x3.
-    # Jika len_result adalah 1, grid 1x1.
-    # Jika len_result adalah 0 (jarang terjadi), hindari error.
+    
     if len_result == 0:
         print("Warning: Hasil caption kosong, tidak bisa plot attention.")
         return
@@ -165,9 +147,9 @@ def plot_attention(image_path, result_caption, attention_plot):
     rows = int(np.ceil(len_result / cols))
 
     for l_idx, word in enumerate(result_caption.split()):
-        if l_idx >= attention_plot.shape[0]:  # Pastikan tidak out of bounds
+        if l_idx >= attention_plot.shape[0]:  
             break
-        # Asumsi fitur attention adalah 8x8
+      
         temp_att = np.resize(attention_plot[l_idx], (8, 8))
         ax = fig.add_subplot(rows, cols, l_idx + 1)
         ax.set_title(word)
@@ -273,8 +255,7 @@ def main(args):
     embedding_dim = config['embedding_dim']
     units = config['units']
     vocab_size = config['vocab_size']
-    features_shape = config['features_shape']  # e.g. 2048 (output Inception)
-    # e.g. 64 (8x8)
+    features_shape = config['features_shape']  
     attention_features_shape = config['attention_features_shape']
 
     print("Memuat tokenizer...")
@@ -343,7 +324,7 @@ def main(args):
 
     if args.show_attention:
         print("\nMenampilkan plot attention...")
-        # Hapus <start> dan <end> jika ada untuk plotting
+    
         plot_caption_tokens = [word for word in caption.split() if word not in [
             '<start>', '<end>']]
         plot_attention(image_path, ' '.join(
@@ -361,7 +342,6 @@ if __name__ == '__main__':
     parser.add_argument('--show_attention', action='store_true',
                         help='Tampilkan plot attention (membutuhkan matplotlib).')
 
-    # Nonaktifkan GPU jika ada masalah, atau biarkan TensorFlow yang memilih
     # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     # print(f"TensorFlow version: {tf.__version__}")
     # gpus = tf.config.experimental.list_physical_devices('GPU')
