@@ -1,8 +1,35 @@
-secrets.txt
-.env
-/backend/venv
-backend/__pycache__/app.cpython-312.pyc
-backend/__pycache__/caption_generator.cpython-312.pyc
-backend/__pycache__/instagram_uploader.cpython-312.pyc
-backend/image_captioning_model_assets/cnn_encoder.weights.h5
-backend/image_captioning_model_assets/inception_feature_extractor.keras
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+*.pyo
+*.pyd
+*.pdb
+*.log
+*.sqlite3
+*.env
+*.DS_Store
+
+# Virtual Environment
+venv/
+env/
+
+# Temp & model files
+temp_uploads/
+image_captioning_model_assets/
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+
+# Svelte / Node
+ui/node_modules/
+ui/.svelte-kit/
+ui/.vite/
+
+# Build files
+dist/
+build/
+
+# VSCode settings (opsional)
+.vscode/
